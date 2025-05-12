@@ -24,7 +24,7 @@ public class DbService : IDbService
         try
         {
             command.Parameters.Clear();
-            command.CommandText = "SELECT * FROM Visits WHERE Id = @id";
+            command.CommandText = "SELECT * FROM Visit WHERE visit_id = @id";
             command.Parameters.AddWithValue("@id", id);
             
             int client_id = -1;
@@ -45,6 +45,7 @@ public class DbService : IDbService
                     visit = new VisitDTO()
                     {
                         Date = reader.GetDateTime(dateOrdinal),
+                        ServiceVisits = new List<ServiceVisitDTO>()
                     };
                 }else throw new FileNotFoundException("Could not find visit with given ID");
             }
@@ -77,7 +78,38 @@ public class DbService : IDbService
 
             using (var reader = await command.ExecuteReaderAsync())
             {
-                
+                if (await reader.ReadAsync())
+                {
+                    int mechanicIdOrdinal = reader.GetOrdinal("mechanic_id");
+                    int firstNameOrdinal = reader.GetOrdinal("first_name");
+                    int lastNameOrdinal = reader.GetOrdinal("last_name");
+                    int licenceNumberOrdinal = reader.GetOrdinal("licence_number");
+
+                    visit.Mechanic = new MechanicDTO()
+                    {
+                        MechanicId = reader.GetInt32(mechanicIdOrdinal),
+                        LicenceNumber = reader.GetString(licenceNumberOrdinal),
+                    };
+                }
+            }
+            
+            command.Parameters.Clear();
+            command.CommandText = "SELECT * FROM Service INNER JOIN Visit_Service ON Service.service_id = Visit_Service.service_id WHERE Visit_Service.visit_id = @visit_id";
+            command.Parameters.AddWithValue("@visit_id", id);
+
+            using (var reader = await command.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    int nameOrdinal = reader.GetOrdinal("name");
+                    int serviceFeeOrdinal = reader.GetOrdinal("service_fee");
+
+                    visit.ServiceVisits.Add(new ServiceVisitDTO()
+                    {
+                        Name = reader.GetString(nameOrdinal),
+                        ServiceFee = reader.GetDecimal(serviceFeeOrdinal),
+                    });
+                }
             }
         }
         catch (Exception ex)
@@ -88,4 +120,5 @@ public class DbService : IDbService
 
         return visit;
     }
+    
 }

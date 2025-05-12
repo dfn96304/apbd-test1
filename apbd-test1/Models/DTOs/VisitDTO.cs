@@ -5,5 +5,5 @@ public class VisitDTO
     public DateTime Date { get; set; }
     public ClientDTO Client { get; set; }
     public MechanicDTO Mechanic { get; set; }
-    public VisitServiceDTO VisitService { get; set; }
+    public List<ServiceVisitDTO> ServiceVisits { get; set; }
 }
