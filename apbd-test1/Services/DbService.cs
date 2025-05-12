@@ -1,5 +1,8 @@
-﻿using System.Data.Common;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Data.Common;
+using System.Data.SqlTypes;
 using apbd_test1.Models.DTOs;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Data.SqlClient;
 
 namespace apbd_test1.Services;
@@ -138,21 +141,30 @@ public class DbService : IDbService
         {
             // Find mechanic with the given licence number
             command.Parameters.Clear();
-            command.CommandText = "SELECT mechanic_id FROM Mechanic WHERE licence_number = @licence_number;";
+            command.CommandText = "SELECT mechanic_id FROM Mechanic WHERE licence_number = @licence_number";
             command.Parameters.AddWithValue("@licence_number", visit.MechanicLicenceNumber);
-            
             var mechanicIdTask = await command.ExecuteScalarAsync();
-            if (mechanicIdTask == null) throw new Exception("Could not find mechanic with licence number: "+visit.MechanicLicenceNumber);
+            if (mechanicIdTask == null) throw new FileNotFoundException("Could not find mechanic with licence number: "+visit.MechanicLicenceNumber);
             int mechanicId = Convert.ToInt32(mechanicIdTask);
             
-            Console.WriteLine("mechanicId: "+mechanicId);
+            command.Parameters.Clear();
+            command.CommandText = "SELECT * FROM Visit WHERE visit_id = @visit_id";
+            command.Parameters.AddWithValue("@visit_id", visit.VisitId);
+            var visitCheckTask = await command.ExecuteScalarAsync();
+            if(visitCheckTask != null) throw new SqlAlreadyFilledException("The visit with given id already exists");
+
+            command.Parameters.Clear();
+            command.CommandText = "SELECT client_id FROM Client WHERE client_id = @client_id";
+            command.Parameters.AddWithValue("@client_id", visit.ClientId);
+            var clientCheckTask = await command.ExecuteScalarAsync();
+            if(clientCheckTask == null) throw new FileNotFoundException("Could not find client with given id");
             
             command.Parameters.Clear();
-            command.CommandText = "INSERT INTO Visit (visit_id, client_id, mechanic_id, date) VALUES (@visit_id, @client_id, @mechanic_id, @date);";
+            command.CommandText = "INSERT INTO Visit (visit_id, client_id, mechanic_id, date) VALUES (@visit_id, @client_id, @mechanic_id, GETDATE())";
             command.Parameters.AddWithValue("@visit_id", visit.VisitId);
             command.Parameters.AddWithValue("@client_id", visit.ClientId);
             command.Parameters.AddWithValue("@mechanic_id", mechanicId);
-            command.Parameters.AddWithValue("@date", DateTime.Now);
+            //command.Parameters.AddWithValue("@date", DateTime.Now);
             
             var visitTask = await command.ExecuteNonQueryAsync();
             if(visitTask != 1) throw new Exception("Visit row was not added successfully");
@@ -163,20 +175,21 @@ public class DbService : IDbService
             {
                 // Find service with the given name
                 command.Parameters.Clear();
-                command.CommandText = "SELECT service_id FROM Service WHERE name = @name;";
+                command.CommandText = "SELECT service_id FROM Service WHERE name = @name";
                 command.Parameters.AddWithValue("@name", service.ServiceName);
                 var serviceIdTask = await command.ExecuteScalarAsync();
                 if (serviceIdTask == null)
                 {
-                    throw new Exception("Could not find service with given name: "+service.ServiceName);
+                    throw new FileNotFoundException("Could not find service with given name: "+service.ServiceName);
                 }
                 int serviceId = Convert.ToInt32(serviceIdTask);
                 
                 command.Parameters.Clear();
-                command.CommandText = "INSERT INTO Service_Visit (visit_id, service_id, service_fee);";
+                command.CommandText = "INSERT INTO Visit_Service (visit_id, service_id, service_fee) VALUES (@visit_id, @service_id, @service_fee)";
                 command.Parameters.AddWithValue("@visit_id", visit.VisitId);
                 command.Parameters.AddWithValue("@service_id", serviceId);
                 command.Parameters.AddWithValue("@service_fee", service.ServiceFee);
+                
                 var rows = await command.ExecuteNonQueryAsync();
                 if(rows != 1) throw new Exception("Service was not added successfully");
             }
@@ -185,7 +198,7 @@ public class DbService : IDbService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to create visit: {ex.Message}");
+            //Console.WriteLine($"Failed to create visit: {ex.Message}");
             await transaction.RollbackAsync();
             throw;
         }

@@ -1,4 +1,5 @@
-﻿using apbd_test1.Models.DTOs;
+﻿using System.Data.SqlTypes;
+using apbd_test1.Models.DTOs;
 using apbd_test1.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -37,9 +38,17 @@ public class VisitsController : ControllerBase
             await _dbService.NewVisit(visit);
             return Created();
         }
-        catch (Exception e)
+        catch (SqlAlreadyFilledException e)
         {
-            return BadRequest(e.Message);   
+            return BadRequest(e.Message);
+        }
+        catch (FileNotFoundException e)
+        {
+            return NotFound(e.Message);
+        }
+        catch (ArgumentException e)
+        {
+            return BadRequest(e.Message);
         }
     }
 }
