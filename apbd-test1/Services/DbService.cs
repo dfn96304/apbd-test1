@@ -111,6 +111,8 @@ public class DbService : IDbService
                     });
                 }
             }
+
+            await transaction.CommitAsync();
         }
         catch (Exception ex)
         {
@@ -120,5 +122,72 @@ public class DbService : IDbService
 
         return visit;
     }
-    
+
+    public async Task NewVisit(CreateVisitDTO visit)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = connection.CreateCommand();
+        
+        command.Connection = connection;
+        await connection.OpenAsync();
+        
+        DbTransaction transaction = connection.BeginTransaction();
+        command.Transaction = transaction as SqlTransaction;
+
+        try
+        {
+            // Find mechanic with the given licence number
+            command.Parameters.Clear();
+            command.CommandText = "SELECT mechanic_id FROM Mechanic WHERE licence_number = @licence_number;";
+            command.Parameters.AddWithValue("@licence_number", visit.MechanicLicenceNumber);
+            
+            var mechanicIdTask = await command.ExecuteScalarAsync();
+            if (mechanicIdTask == null) throw new Exception("Could not find mechanic with licence number: "+visit.MechanicLicenceNumber);
+            int mechanicId = Convert.ToInt32(mechanicIdTask);
+            
+            Console.WriteLine("mechanicId: "+mechanicId);
+            
+            command.Parameters.Clear();
+            command.CommandText = "INSERT INTO Visit (visit_id, client_id, mechanic_id, date) VALUES (@visit_id, @client_id, @mechanic_id, @date);";
+            command.Parameters.AddWithValue("@visit_id", visit.VisitId);
+            command.Parameters.AddWithValue("@client_id", visit.ClientId);
+            command.Parameters.AddWithValue("@mechanic_id", mechanicId);
+            command.Parameters.AddWithValue("@date", DateTime.Now);
+            
+            var visitTask = await command.ExecuteNonQueryAsync();
+            if(visitTask != 1) throw new Exception("Visit row was not added successfully");
+            
+            Console.WriteLine("Visit row was added successfully");
+            
+            foreach(CreateServiceDTO service in visit.Services)
+            {
+                // Find service with the given name
+                command.Parameters.Clear();
+                command.CommandText = "SELECT service_id FROM Service WHERE name = @name;";
+                command.Parameters.AddWithValue("@name", service.ServiceName);
+                var serviceIdTask = await command.ExecuteScalarAsync();
+                if (serviceIdTask == null)
+                {
+                    throw new Exception("Could not find service with given name: "+service.ServiceName);
+                }
+                int serviceId = Convert.ToInt32(serviceIdTask);
+                
+                command.Parameters.Clear();
+                command.CommandText = "INSERT INTO Service_Visit (visit_id, service_id, service_fee);";
+                command.Parameters.AddWithValue("@visit_id", visit.VisitId);
+                command.Parameters.AddWithValue("@service_id", serviceId);
+                command.Parameters.AddWithValue("@service_fee", service.ServiceFee);
+                var rows = await command.ExecuteNonQueryAsync();
+                if(rows != 1) throw new Exception("Service was not added successfully");
+            }
+            
+            await transaction.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to create visit: {ex.Message}");
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
 }

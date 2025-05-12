@@ -30,8 +30,16 @@ public class VisitsController : ControllerBase
     }
 
     [HttpPost]
-    /*public async Task<IActionResult> NewVisit([FromBody] VisitDTO visit)
+    public async Task<IActionResult> NewVisit([FromBody] CreateVisitDTO visit)
     {
-        
-    }*/
+        try
+        {
+            await _dbService.NewVisit(visit);
+            return Created();
+        }
+        catch (Exception e)
+        {
+            return BadRequest(e.Message);   
+        }
+    }
 }
